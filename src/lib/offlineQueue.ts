@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 const QUEUE_KEY = "jijau_offline_queue_v1";
 const PENDING_FLAG = "jijau_offline_pending";
