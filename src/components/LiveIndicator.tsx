@@ -40,11 +40,8 @@ export default function LiveIndicator({
     setServerUrl(inputUrl);
     setOpen(false);
     syncNow();
-    window.dispatchEvent(
-      new CustomEvent("jijau_saved", {
-        detail: { message: "✓ Live server endpoint updated & synced!", type: "success" },
-      })
-    );
+    // Popup notification disabled intentionally.
+    // Live sync still runs normally via syncNow().
   };
 
   return (
