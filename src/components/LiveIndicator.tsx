@@ -40,8 +40,7 @@ export default function LiveIndicator({
     setServerUrl(inputUrl);
     setOpen(false);
     syncNow();
-    // Popup notification disabled intentionally.
-    // Live sync still runs normally via syncNow().
+    // Live sync continues, but no popup notification is dispatched.
   };
 
   return (
