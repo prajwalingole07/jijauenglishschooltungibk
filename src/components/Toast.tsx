@@ -15,6 +15,23 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const show = (message: string, type: Toast["type"] = "success", duration = 3200) => {
+    // PERMANENTLY DISABLE ALL LIVE-SYNC POPUPS.
+    // This does not disable syncing; it only prevents the toast from appearing.
+    if (type === "live") return;
+
+    const lower = String(message).toLowerCase();
+    const isLiveSyncMessage =
+      lower.includes("live synced") ||
+      lower.includes("live sync") ||
+      lower.includes("live server") ||
+      lower.includes("server synced") ||
+      lower.includes("cloud sync") ||
+      lower.includes("cloud synced") ||
+      lower.includes("endpoint updated") ||
+      lower.includes("synced (");
+
+    if (isLiveSyncMessage) return;
+
     const id = Math.random().toString(36).slice(2, 9);
     setToasts((p) => [...p, { id, message, type, duration }]);
     setTimeout(() => {
@@ -24,11 +41,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   // Listen for live edits from Store via custom event
   useEffect(() => {
-    const onLive = (e: any) => {
-      const detail = e.detail;
-      if (detail?.message) {
-        show(detail.message, "live", 3500);
-      }
+    // Live edit events are intentionally ignored by the toast system.
+    // Other parts of the app can still use these events for data updates.
+    const onLive = (_e: any) => {
+      return;
     };
     const onSaved = (e: any) => {
       const detail = e.detail;
