@@ -182,9 +182,7 @@ export function StoreProvider({children}:{children:React.ReactNode}){
         const p = await r.json();
         if(p && !p.empty && p._updatedAt && p._updatedAt > lastCloudAt.current){
           applyPayload(p);
-          try{
-            window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:`⚡ Live synced (${lat}ms)`, type:"info"}}));
-          }catch{}
+          // Live sync completed successfully. No popup/toast is shown.
         }
       }
     }catch{}
