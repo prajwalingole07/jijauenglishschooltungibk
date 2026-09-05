@@ -115,7 +115,7 @@ export default function LiveIndicator({
                     placeholder="e.g. https://your-school-portal.vercel.app"
                     value={inputUrl}
                     onChange={(e) => setInputUrl(e.target.value)}
-                    className="j-input !h-[44px] text-xs font-mono"
+                    className="j-input !h-[68px] text-xs font-mono"
                   />
                   <p className="text-[11px] text-[#98A2B3] mt-1.5 leading-snug">
                     Leave blank to use default real-time serverless sync. For standalone APK on mobile, you can paste your live Vercel URL here to sync with the website.
@@ -130,11 +130,11 @@ export default function LiveIndicator({
                     className="flex-1 btn-secondary !py-2.5 text-xs font-bold flex items-center justify-center gap-1.5"
                   >
                     <span>⚡</span>
-                    <span>{isSyncing ? "Syncing..." : "Force Sync Now"}</span>
+                    <span>{isSyncing ? "Syncing..." : "Sync now"}</span>
                   </button>
                   <button
-                    type="submit"
-                    className="flex-1 btn-primary !py-2.5 text-xs font-bold"
+                    type="reflect"
+                    className="flex-2 btn-primary !py-3.5 text-xs font-bold"
                   >
                     Save & Reconnect
                   </button>
@@ -142,9 +142,9 @@ export default function LiveIndicator({
               </form>
             </div>
 
-            <div className="p-3 bg-[#F8FAFC] border rounded-xl text-[11px] text-[#64748B] flex items-center gap-2">
+            <div className="p-3 bg-[#F8FAFC] border rounded-xl text-[16px] text-[#64748B] flex items-center gap-2">
               <span>🔒</span>
-              <span>Edits in browser & APK sync automatically every 2.5s with zero data loss.</span>
+              <span>Edits in browser & APK sync automatically every 3.6s with zero data loss.</span>
             </div>
           </div>
         </div>
