@@ -237,19 +237,31 @@ export async function printReceiptPDF(data: ReceiptData) {
 export async function shareReceiptPDF(data: ReceiptData) {
   const doc = await generateReceiptPDF(data);
   const safe2 = sanitizeNameR(data.student?.name);
-  const fileName = `${safe2}_${data.tx.receiptNo}.pdf`;
-  const title = `Fee Receipt ${data.tx.receiptNo}`;
-  const text = `Fee Receipt for ${data.student?.name} - Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}`;
-  const { sharePdfFileDirectly } = await import("./pdfDownload");
-  const shared = await sharePdfFileDirectly(doc, fileName, title, text);
-  if (shared) return;
-  try {
-    const blob = doc.output("blob");
-    const file = new File([blob], fileName, { type: "application/pdf" });
-    if (typeof navigator.share === "function") {
-      await (navigator as any).share({ title, text, files: [file] });
+  if (isNative()) {
+    try {
+      const { Filesystem, Directory } = await import("@capacitor/filesystem");
+      const { Share } = await import("@capacitor/share");
+      const fileName = `${safe2}_${data.tx.receiptNo}.pdf`;
+      const base64 = doc.output("datauristring").split(",")[1];
+      const res = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
+      await Share.share({ title: `Fee Receipt ${data.tx.receiptNo}`, text: `Fee Receipt for ${data.student?.name} - Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}`, url: res.uri, dialogTitle: "Share via WhatsApp" });
       return;
-    }
-  } catch {}
-  try { window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:"WhatsApp file share not supported — please use Download then share from Downloads", type:"info"}})); } catch {}
+    } catch {}
+  }
+  const blob = doc.output("blob");
+  const file = new File([blob], `${safe2}_${data.tx.receiptNo}.pdf`, { type: "application/pdf" });
+  if (typeof navigator.canShare === "function" && (navigator as any).canShare({ files: [file] })) {
+    try {
+      await (navigator as any).share({ title: `Fee Receipt ${data.tx.receiptNo}`, text: `Fee Receipt for ${data.student?.name} - Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}`, files: [file] });
+      return;
+    } catch {}
+  }
+  const msg = `*${data.settings.schoolName}*%0AFee Receipt: ${data.tx.receiptNo}%0AStudent: ${data.student?.name}%0AAmount: Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}%0ADate: ${new Date(data.tx.date).toLocaleDateString("en-GB")}%0A%0A*PDF attached - please download from portal*`;
+  window.open(`https://wa.me/?text=${msg}`, "_blank");
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${safe2}_${data.tx.receiptNo}.pdf`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }

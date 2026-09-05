@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import jsPDF from "jspdf";
 
 type AdmissionData = {
@@ -358,20 +358,27 @@ export async function shareAdmissionPDF(data: AdmissionData) {
   const doc = await generateAdmissionPDF(data);
   const safe = sanitizeName(data.student?.name);
   const fileName = `${safe}_${data.admissionNo}.pdf`;
-  const title = `Admission Form ${data.admissionNo}`;
-  const text = `Admission Form for ${data.student?.name} - ${data.admissionNo}`;
-  const { sharePdfFileDirectly } = await import("./pdfDownload");
-  const shared = await sharePdfFileDirectly(doc, fileName, title, text);
-  if (shared) return;
-  try {
-    const blob: any = doc.output("blob");
-    const file = new File([blob], fileName, { type: "application/pdf" });
-    if (typeof navigator.share === "function") {
-      await (navigator as any).share({ title, text, files: [file] });
+  if (isNative()) {
+    try {
+      const { Filesystem, Directory } = await import("@capacitor/filesystem");
+      const { Share } = await import("@capacitor/share");
+      const base64 = doc.output("datauristring").split(",")[1];
+      try { await Filesystem.requestPermissions(); } catch {}
+      const res = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
+      await Share.share({ title: `Admission Form ${data.admissionNo}`, text: `Admission Form for ${data.student?.name} - ${data.admissionNo}`, url: res.uri, dialogTitle: "Share via WhatsApp" });
       return;
-    }
-  } catch {}
-  try { window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:"WhatsApp file share not supported — please use Download then share from Downloads", type:"info"}})); } catch {}
+    } catch {}
+  }
+  const blob: any = doc.output("blob");
+  const file = new File([blob], fileName, { type: "application/pdf" });
+  if (typeof navigator.canShare === "function" && (navigator as any).canShare({ files: [file] })) {
+    try { await (navigator as any).share({ title: `Admission Form ${data.admissionNo}`, text: `Admission Form for ${data.student?.name} - ${data.admissionNo}`, files: [file] }); return; } catch {}
+  }
+  const msg = `*Admission Form: ${data.admissionNo}*%0AStudent: ${data.student?.name}%0AClass: ${data.student?.className}%0A%0A*PDF attached - please download from portal*`;
+  window.open(`https://wa.me/?text=${msg}`, "_blank");
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = fileName; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 export async function printAdmissionPDF(data: AdmissionData) {
