@@ -208,30 +208,8 @@ export async function downloadReceiptPDF(data: ReceiptData) {
   const doc = await generateReceiptPDF(data);
   const safe = sanitizeNameR(data.student?.name);
   const fileName = `${safe}_${data.tx.receiptNo}.pdf`;
-  if (isNative()) {
-    try {
-      const base64 = doc.output("datauristring").split(",")[1];
-      const And = (window as any).Android;
-      if (And?.savePdf) { And.savePdf(base64, fileName); return; }
-    } catch {}
-    try {
-      const { Filesystem, Directory } = await import("@capacitor/filesystem");
-      const base64 = doc.output("datauristring").split(",")[1];
-      try { await Filesystem.requestPermissions(); } catch {}
-      await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Documents });
-      return;
-    } catch {}
-    try {
-      const { Filesystem, Directory } = await import("@capacitor/filesystem");
-      const { Share } = await import("@capacitor/share");
-      const fileName = `${data.tx.receiptNo}.pdf`;
-      const base64 = doc.output("datauristring").split(",")[1];
-      const res = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
-      await Share.share({ title: fileName, url: res.uri, dialogTitle: "Save / Share PDF" });
-      return;
-    } catch {}
-  }
-  doc.save(fileName);
+  const { saveGeneratedPdf } = await import("./pdfDownload");
+  await saveGeneratedPdf(doc, fileName);
 }
 
 export async function printReceiptPDF(data: ReceiptData) {
@@ -259,31 +237,44 @@ export async function printReceiptPDF(data: ReceiptData) {
 export async function shareReceiptPDF(data: ReceiptData) {
   const doc = await generateReceiptPDF(data);
   const safe2 = sanitizeNameR(data.student?.name);
+  const fileName = `${safe2}_${data.tx.receiptNo}.pdf`;
+  // 1) Native: write to cache then use Capacitor Share sheet (shows WhatsApp etc.)
   if (isNative()) {
     try {
       const { Filesystem, Directory } = await import("@capacitor/filesystem");
       const { Share } = await import("@capacitor/share");
-      const fileName = `${safe2}_${data.tx.receiptNo}.pdf`;
       const base64 = doc.output("datauristring").split(",")[1];
+      try { await Filesystem.requestPermissions(); } catch {}
       const res = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
       await Share.share({ title: `Fee Receipt ${data.tx.receiptNo}`, text: `Fee Receipt for ${data.student?.name} - Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}`, url: res.uri, dialogTitle: "Share via WhatsApp" });
       return;
     } catch {}
   }
-  const blob = doc.output("blob");
-  const file = new File([blob], `${safe2}_${data.tx.receiptNo}.pdf`, { type: "application/pdf" });
-  if (typeof navigator.canShare === "function" && (navigator as any).canShare({ files: [file] })) {
-    try {
-      await (navigator as any).share({ title: `Fee Receipt ${data.tx.receiptNo}`, text: `Fee Receipt for ${data.student?.name} - Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}`, files: [file] });
-      return;
-    } catch {}
-  }
-  const msg = `*${data.settings.schoolName}*%0AFee Receipt: ${data.tx.receiptNo}%0AStudent: ${data.student?.name}%0AAmount: Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}%0ADate: ${new Date(data.tx.date).toLocaleDateString("en-GB")}%0A%0A*PDF attached - please download from portal*`;
+  // 2) Web Share API with file (Android Chrome, iOS)
+  try {
+    const blob = doc.output("blob");
+    const file = new File([blob], fileName, { type: "application/pdf" });
+    if (typeof navigator.canShare === "function" && (navigator as any).canShare({ files: [file] })) {
+      try {
+        await (navigator as any).share({ title: `Fee Receipt ${data.tx.receiptNo}`, text: `Fee Receipt for ${data.student?.name} - Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}`, files: [file] });
+        return;
+      } catch {}
+    }
+  } catch {}
+  // 3) Fallback: open WhatsApp with text + also trigger direct download to Downloads
+  const msg = `*${data.settings.schoolName}*%0AFee Receipt: ${data.tx.receiptNo}%0AStudent: ${data.student?.name}%0AAmount: Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}%0ADate: ${new Date(data.tx.date).toLocaleDateString("en-GB")}%0A%0A*PDF will download to your Downloads — please attach manually if needed*`;
   window.open(`https://wa.me/?text=${msg}`, "_blank");
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${safe2}_${data.tx.receiptNo}.pdf`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  // Also save to Downloads for user to attach manually
+  try {
+    const { saveGeneratedPdf } = await import("./pdfDownload");
+    await saveGeneratedPdf(doc, fileName);
+  } catch {
+    const blob = doc.output("blob");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
 }

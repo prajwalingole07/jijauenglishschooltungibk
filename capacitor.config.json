@@ -3,7 +3,6 @@
   "appName": "JIJAU ENGLISH SCHOOL, TUNGI (B.K)",
   "webDir": ".next",
   "server": {
-    "url": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com",
     "cleartext": true
   },
   "android": {

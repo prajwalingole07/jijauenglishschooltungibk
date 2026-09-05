@@ -350,15 +350,34 @@ export async function downloadAdmissionPDF(data: AdmissionData) {
   const doc = await generateAdmissionPDF(data);
   const safe = sanitizeName(data.student?.name);
   const fileName = `${safe}_${data.admissionNo}.pdf`;
+  const { saveGeneratedPdf } = await import("./pdfDownload");
+  await saveGeneratedPdf(doc, fileName);
+}
+
+export async function shareAdmissionPDF(data: AdmissionData) {
+  const doc = await generateAdmissionPDF(data);
+  const safe = sanitizeName(data.student?.name);
+  const fileName = `${safe}_${data.admissionNo}.pdf`;
   if (isNative()) {
     try {
       const { Filesystem, Directory } = await import("@capacitor/filesystem");
+      const { Share } = await import("@capacitor/share");
       const base64 = doc.output("datauristring").split(",")[1];
       try { await Filesystem.requestPermissions(); } catch {}
-      await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Documents });
+      const res = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
+      await Share.share({ title: `Admission Form ${data.admissionNo}`, text: `Admission Form for ${data.student?.name} - ${data.admissionNo}`, url: res.uri, dialogTitle: "Share via WhatsApp" });
       return;
     } catch {}
   }
+  try {
+    const blob: any = doc.output("blob");
+    const file = new File([blob], fileName, { type: "application/pdf" });
+    if (typeof navigator.canShare === "function" && (navigator as any).canShare({ files: [file] })) {
+      try { await (navigator as any).share({ title: `Admission Form ${data.admissionNo}`, text: `Admission Form for ${data.student?.name} - ${data.admissionNo}`, files: [file] }); return; } catch {}
+    }
+  } catch {}
+  const msg = `*${data.settings.schoolName}*%0AAdmission Form: ${data.admissionNo}%0AStudent: ${data.student?.name}%0AClass: ${data.student?.className}%0APDF will download to Downloads — please attach manually if needed`;
+  window.open(`https://wa.me/?text=${msg}`, "_blank");
   const { saveGeneratedPdf } = await import("./pdfDownload");
   await saveGeneratedPdf(doc, fileName);
 }

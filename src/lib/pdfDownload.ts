@@ -1,46 +1,77 @@
-// Universal, wrapper-agnostic "save this PDF to the phone" helper.
-//
-// Why this exists: a plain WebView-based APK wrapper (web2app, Median, GoNative, etc.)
-// has no Capacitor bridge and generally does NOT catch client-only blob:/data: URI
-// downloads triggered by JS (e.g. jsPDF's doc.save(), or a hidden <a download> click).
-// Those only reliably work in a real desktop/mobile browser.
-//
-// The one download mechanism that works everywhere — Capacitor apps, plain WebView
-// wrapper apps, and normal browsers alike — is a genuine HTTP response with a
-// Content-Disposition: attachment header, because that is what Android's native
-// download handling (DownloadManager) is built to catch regardless of which app
-// is hosting the WebView.
-//
-// Strategy, in order:
-//   1. If running inside a real Capacitor native app, use Capacitor Filesystem (best:
-//      no network needed, saves straight to Documents).
-//   2. Otherwise, POST the PDF bytes to our own server and navigate to the response
-//      via a real form submission — this triggers a genuine HTTP download that any
-//      WebView wrapper (including web2app) will save to the Downloads folder.
-//   3. If that fails for any reason (e.g. fully offline), fall back to the plain
-//      browser blob download, which still works in normal desktop/mobile browsers.
+// Universal, wrapper-agnostic "save this PDF to the phone/Downloads" helper.
+// Requirements: when user taps Download PDF on mobile, file must land in
+// phone storage Downloads/Documents folder without requiring extra steps.
+
+function isCapacitorNative(): boolean {
+  try { return !!(window as any).Capacitor?.isNativePlatform?.(); } catch { return false; }
+}
+
+function showToast(msg: string, type: "success"|"info"|"error" = "success") {
+  try { window.dispatchEvent(new CustomEvent("jijau_saved", { detail: { message: msg, type } })); } catch {}
+}
 
 export async function saveGeneratedPdf(doc: any, fileName: string): Promise<void> {
-  const isCapacitorNative = !!(window as any).Capacitor?.isNativePlatform?.();
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]+/g, "_") || "document.pdf";
+  const withPdf = safeName.toLowerCase().endsWith(".pdf") ? safeName : `${safeName}.pdf`;
 
-  if (isCapacitorNative) {
+  // 1. Custom Android WebView bridge (web2app / median) — direct save to Downloads via native code
+  try {
+    const And = (window as any).Android;
+    if (And?.savePdf) {
+      const base64 = doc.output("datauristring").split(",")[1];
+      And.savePdf(base64, withPdf);
+      showToast(`✓ ${withPdf} saved to Downloads`, "success");
+      return;
+    }
+  } catch {}
+
+  // 2. Capacitor native — try multiple directories to land in visible storage
+  if (isCapacitorNative()) {
     try {
       const { Filesystem, Directory } = await import("@capacitor/filesystem");
       const base64 = doc.output("datauristring").split(",")[1];
       try { await Filesystem.requestPermissions(); } catch {}
-      await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Documents });
-      return;
+      // Try Documents first (maps to /Documents on Android, visible in file manager)
+      // This is the most reliable for Capacitor on Android 10+
+      try {
+        await Filesystem.writeFile({ path: withPdf, data: base64, directory: Directory.Documents });
+        showToast(`✓ ${withPdf} saved to Documents`, "success");
+        // Also try to trigger share sheet so user can see file location, but file is already saved
+        return;
+      } catch {}
+      // Fallback: try Cache + Share if Documents write fails
+      try {
+        const { Share } = await import("@capacitor/share");
+        const res = await Filesystem.writeFile({ path: withPdf, data: base64, directory: Directory.Cache });
+        await Share.share({ title: withPdf, url: res.uri, dialogTitle: "PDF saved — choose Downloads" });
+        showToast(`✓ ${withPdf} ready — pick Downloads to save`, "success");
+        return;
+      } catch {}
+      // Last native fallback: ExternalStorage (Android 9 and below)
+      try {
+        const DirAny: any = Directory as any;
+        if (DirAny.ExternalStorage) {
+          await Filesystem.writeFile({ path: withPdf, data: base64, directory: DirAny.ExternalStorage });
+          showToast(`✓ ${withPdf} saved to storage`, "success");
+          return;
+        }
+      } catch {}
     } catch {
-      // fall through to the server-route method below
+      // fall through to HTTP download method
     }
   }
 
+  // 3. Web wrapper / PWA — POST to /api/download-pdf so Android DownloadManager catches it
+  // This works in plain WebView wrappers (web2app etc.) where blob downloads are ignored,
+  // because it is a real HTTP response with Content-Disposition: attachment
   try {
     const base64 = doc.output("datauristring").split(",")[1];
     const form = document.createElement("form");
     form.method = "POST";
     form.action = "/api/download-pdf";
     form.style.display = "none";
+    // Use target _self so DownloadManager handles it; do not open new tab which wrapper may block
+    form.target = "_self";
 
     const fileInput = document.createElement("input");
     fileInput.type = "hidden";
@@ -51,17 +82,25 @@ export async function saveGeneratedPdf(doc: any, fileName: string): Promise<void
     const nameInput = document.createElement("input");
     nameInput.type = "hidden";
     nameInput.name = "fileName";
-    nameInput.value = fileName;
+    nameInput.value = withPdf;
     form.appendChild(nameInput);
 
     document.body.appendChild(form);
     form.submit();
-    setTimeout(() => { try { document.body.removeChild(form); } catch {} }, 2000);
+    // Keep form briefly then cleanup; browser will have started download
+    setTimeout(() => { try { document.body.removeChild(form); } catch {} }, 3000);
+    showToast(`⬇️ Downloading ${withPdf} to Downloads…`, "success");
     return;
   } catch {
-    // fall through to the plain blob fallback below
+    // fall through to blob fallback
   }
 
-  // Last-resort fallback for normal browsers without network access
-  doc.save(fileName);
+  // 4. Last-resort fallback for desktop browsers — trigger blob download
+  try {
+    doc.save(withPdf);
+    showToast(`✓ ${withPdf} download started`, "success");
+  } catch (e:any) {
+    showToast(`Download failed: ${e?.message || "unknown"}`, "error");
+    throw e;
+  }
 }

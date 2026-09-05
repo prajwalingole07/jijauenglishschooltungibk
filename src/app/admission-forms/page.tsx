@@ -212,35 +212,14 @@ function AdmissionFormModal({student, settings, onClose}:{student:any; settings:
          </div>
          </div>
 
-         <div className="p-3 flex gap-2 sticky bottom-0 bg-[#F3F4F6] border-t">
-          <button onClick={handlePrint} className="flex-1 btn-primary">Print</button>
-          <button onClick={async ()=>{
-            const safe = (student.name||'Student').replace(/[^a-zA-Z0-9]+/g,'_').slice(0,40);
-            const fileName = `${safe}_${admNo}.pdf`;
-            const doc = await (await import("@/lib/admissionPdf")).generateAdmissionPDF({ student, settings, admissionNo: admNo, admissionDate: admDate });
-            const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
-            if(isNative){
-              try{
-                const { Filesystem, Directory } = await import("@capacitor/filesystem");
-                const { Share } = await import("@capacitor/share");
-                const base64 = doc.output("datauristring").split(",")[1];
-                const res = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
-                await Share.share({ title: `Admission Form ${admNo}`, text: `Admission Form for ${student.name} - ${admNo}`, url: res.uri, dialogTitle: "Share via WhatsApp" });
-                return;
-              }catch{}
-            }
-            const blob: any = doc.output("blob");
-            const file = new File([blob], fileName, { type: "application/pdf" });
-            if(typeof navigator.canShare === "function" && (navigator as any).canShare({files:[file]})){
-              try{ await (navigator as any).share({ title: `Admission Form ${admNo}`, text: `Admission Form for ${student.name} - ${admNo}`, files:[file]}); return; }catch{}
-            }
-            const url = URL.createObjectURL(blob);
-            const a=document.createElement("a"); a.href=url; a.download=fileName; a.click();
-            const msg=`*${settings.schoolName}*%0AAdmission Form: ${admNo}%0AStudent: ${student.name}%0AClass: ${student.className}%0APDF attached - please download`;
-            window.open(`https://wa.me/?text=${msg}`,"_blank");
-          }} className="flex-1 bg-[#25D366] text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">💬 WhatsApp PDF</button>
-          <button onClick={handleDownload} className="flex-1 btn-secondary">Download PDF</button>
-        </div>
+          <div className="p-3 flex gap-2 sticky bottom-0 bg-[#F3F4F6] border-t">
+           <button onClick={handlePrint} className="flex-1 btn-primary min-h-[44px] touch-manipulation">Print</button>
+           <button onClick={async ()=>{
+             const { shareAdmissionPDF } = await import("@/lib/admissionPdf");
+             await shareAdmissionPDF({ student, settings, admissionNo: admNo, admissionDate: admDate });
+           }} className="flex-1 bg-[#25D366] text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 min-h-[44px] touch-manipulation active:scale-95">💬 WhatsApp PDF</button>
+           <button onClick={handleDownload} className="flex-1 btn-secondary min-h-[44px] touch-manipulation">Download PDF</button>
+         </div>
       </div>
     </div>
   );

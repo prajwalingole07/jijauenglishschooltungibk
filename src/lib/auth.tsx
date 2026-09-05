@@ -18,7 +18,23 @@ type Ctx = {
 const AuthContext = createContext<Ctx | null>(null);
 
 function getStoredUser(): AuthUser | null{
-  try{ const raw=localStorage.getItem(AUTH_KEY); if(raw) return JSON.parse(raw); }catch{}
+  try{
+    const raw=localStorage.getItem(AUTH_KEY);
+    if(raw) {
+      const u = JSON.parse(raw);
+      // Merge persisted profile photo if present in jijau_profile_photos (survives refresh)
+      try {
+        const photosRaw = localStorage.getItem("jijau_profile_photos");
+        if(photosRaw){
+          const m = JSON.parse(photosRaw);
+          if(u?.username && m[u.username] && !(u as any).photo){
+            (u as any).photo = m[u.username];
+          }
+        }
+      } catch {}
+      return u;
+    }
+  }catch{}
   return null;
 }
 
@@ -147,6 +163,15 @@ export function AuthProvider({children}:{children:React.ReactNode}){
     if(!user) return;
     const updated={...user, photo:data} as any;
     localStorage.setItem(AUTH_KEY, JSON.stringify(updated));
+    // Also persist to jijau_profile_photos so Header/Sidebar/profile page all see it after refresh
+    try{
+      const raw = localStorage.getItem("jijau_profile_photos");
+      const m = raw? JSON.parse(raw) : {};
+      m[user.username] = data;
+      localStorage.setItem("jijau_profile_photos", JSON.stringify(m));
+      window.dispatchEvent(new Event("storage"));
+      window.dispatchEvent(new CustomEvent("jijau_profile"));
+    } catch {}
     setUser(updated);
   };
 
