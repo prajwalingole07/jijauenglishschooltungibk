@@ -1,0 +1,12 @@
+{
+  "appId": "com.jijau.school",
+  "appName": "JIJAU ENGLISH SCHOOL, TUNGI (B.K)",
+  "webDir": "out",
+  "server": {
+    "url": "https://jijauenglishschooltungibk1.vercel.app",
+    "cleartext": true
+  },
+  "android": {
+    "backgroundColor": "#FFF7F0"
+  }
+}
