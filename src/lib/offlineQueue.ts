@@ -49,10 +49,9 @@ export function hasPending(): boolean {
   }
 }
 
-// Notify live edits — popup removed, keep broadcast for data sync only
+// Notify live edits — popup removed, silent broadcast only
 export function notifyLiveEdit(message: string) {
   try {
-    // Do not dispatch jijau_live_edit popup — silently broadcast for sync only
     const bc = new BroadcastChannel("jijau_live");
     bc.postMessage({ message });
     bc.close();

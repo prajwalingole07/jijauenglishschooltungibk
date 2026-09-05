@@ -1,6 +1,6 @@
-// Universal, wrapper-agnostic "save this PDF to the phone/Downloads" helper.
-// Requirements: when user taps Download PDF on mobile, file must land in
-// phone storage Downloads/Documents folder without requiring extra steps.
+// Silent direct download — no filename prompt, no location chooser.
+// When user taps Download PDF → file goes straight to phone storage.
+// When user taps WhatsApp → file is directly attached via system share sheet.
 
 function isCapacitorNative(): boolean {
   try { return !!(window as any).Capacitor?.isNativePlatform?.(); } catch { return false; }
@@ -13,94 +13,128 @@ function showToast(msg: string, type: "success"|"info"|"error" = "success") {
 export async function saveGeneratedPdf(doc: any, fileName: string): Promise<void> {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]+/g, "_") || "document.pdf";
   const withPdf = safeName.toLowerCase().endsWith(".pdf") ? safeName : `${safeName}.pdf`;
+  const base64 = doc.output("datauristring").split(",")[1];
 
-  // 1. Custom Android WebView bridge (web2app / median) — direct save to Downloads via native code
+  // 1. Custom Android bridge (web2app/median) — silent save to Downloads, no dialog
   try {
     const And = (window as any).Android;
     if (And?.savePdf) {
-      const base64 = doc.output("datauristring").split(",")[1];
       And.savePdf(base64, withPdf);
-      showToast(`✓ ${withPdf} saved to Downloads`, "success");
+      showToast(`✓ ${withPdf} saved`, "success");
+      return;
+    }
+    if (And?.downloadPdf) {
+      And.downloadPdf(base64, withPdf);
+      showToast(`✓ ${withPdf} saved`, "success");
       return;
     }
   } catch {}
 
-  // 2. Capacitor native — try multiple directories to land in visible storage
+  // 2. Capacitor native — silent write to public storage, no chooser
   if (isCapacitorNative()) {
     try {
       const { Filesystem, Directory } = await import("@capacitor/filesystem");
-      const base64 = doc.output("datauristring").split(",")[1];
       try { await Filesystem.requestPermissions(); } catch {}
-      // Try Documents first (maps to /Documents on Android, visible in file manager)
-      // This is the most reliable for Capacitor on Android 10+
+      const DirAny: any = Directory as any;
       try {
-        await Filesystem.writeFile({ path: withPdf, data: base64, directory: Directory.Documents });
-        showToast(`✓ ${withPdf} saved to Documents`, "success");
-        // Also try to trigger share sheet so user can see file location, but file is already saved
-        return;
-      } catch {}
-      // Fallback: try Cache + Share if Documents write fails
-      try {
-        const { Share } = await import("@capacitor/share");
-        const res = await Filesystem.writeFile({ path: withPdf, data: base64, directory: Directory.Cache });
-        await Share.share({ title: withPdf, url: res.uri, dialogTitle: "PDF saved — choose Downloads" });
-        showToast(`✓ ${withPdf} ready — pick Downloads to save`, "success");
-        return;
-      } catch {}
-      // Last native fallback: ExternalStorage (Android 9 and below)
-      try {
-        const DirAny: any = Directory as any;
-        if (DirAny.ExternalStorage) {
-          await Filesystem.writeFile({ path: withPdf, data: base64, directory: DirAny.ExternalStorage });
-          showToast(`✓ ${withPdf} saved to storage`, "success");
+        if (DirAny.ExternalStorage !== undefined) {
+          await Filesystem.writeFile({ path: `Download/${withPdf}`, data: base64, directory: DirAny.ExternalStorage });
+          showToast(`✓ ${withPdf} saved to Downloads`, "success");
           return;
         }
       } catch {}
-    } catch {
-      // fall through to HTTP download method
-    }
+      try {
+        if (DirAny.External !== undefined) {
+          await Filesystem.writeFile({ path: `Download/${withPdf}`, data: base64, directory: DirAny.External });
+          showToast(`✓ ${withPdf} saved to Downloads`, "success");
+          return;
+        }
+      } catch {}
+      try {
+        await Filesystem.writeFile({ path: withPdf, data: base64, directory: Directory.Documents });
+        showToast(`✓ ${withPdf} saved`, "success");
+        return;
+      } catch {}
+      try {
+        await Filesystem.writeFile({ path: withPdf, data: base64, directory: Directory.Data });
+        showToast(`✓ ${withPdf} saved`, "success");
+        return;
+      } catch {}
+    } catch {}
   }
 
-  // 3. Web wrapper / PWA — POST to /api/download-pdf so Android DownloadManager catches it
-  // This works in plain WebView wrappers (web2app etc.) where blob downloads are ignored,
-  // because it is a real HTTP response with Content-Disposition: attachment
+  // 3. Web / PWA / WebView wrapper — use hidden form POST to /api/download-pdf
+  // This triggers Android DownloadManager silently (no filename/location prompt) because
+  // server sends Content-Disposition: attachment; filename="..."
   try {
-    const base64 = doc.output("datauristring").split(",")[1];
     const form = document.createElement("form");
     form.method = "POST";
     form.action = "/api/download-pdf";
     form.style.display = "none";
-    // Use target _self so DownloadManager handles it; do not open new tab which wrapper may block
     form.target = "_self";
-
-    const fileInput = document.createElement("input");
-    fileInput.type = "hidden";
-    fileInput.name = "base64";
-    fileInput.value = base64;
-    form.appendChild(fileInput);
-
-    const nameInput = document.createElement("input");
-    nameInput.type = "hidden";
-    nameInput.name = "fileName";
-    nameInput.value = withPdf;
-    form.appendChild(nameInput);
-
+    const a = document.createElement("input"); a.type="hidden"; a.name="base64"; a.value=base64; form.appendChild(a);
+    const b = document.createElement("input"); b.type="hidden"; b.name="fileName"; b.value=withPdf; form.appendChild(b);
     document.body.appendChild(form);
     form.submit();
-    // Keep form briefly then cleanup; browser will have started download
     setTimeout(() => { try { document.body.removeChild(form); } catch {} }, 3000);
-    showToast(`⬇️ Downloading ${withPdf} to Downloads…`, "success");
+    showToast(`⬇️ ${withPdf} downloading…`, "success");
     return;
-  } catch {
-    // fall through to blob fallback
-  }
+  } catch {}
 
-  // 4. Last-resort fallback for desktop browsers — trigger blob download
+  // 4. Final fallback — anchor download (no prompt beyond browser default)
   try {
-    doc.save(withPdf);
-    showToast(`✓ ${withPdf} download started`, "success");
+    const blob = doc.output("blob");
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = withPdf;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => { try { document.body.removeChild(link); URL.revokeObjectURL(url); } catch {} }, 2000);
+    showToast(`⬇️ ${withPdf} downloading…`, "success");
+    return;
   } catch (e:any) {
-    showToast(`Download failed: ${e?.message || "unknown"}`, "error");
+    showToast(`Download failed`, "error");
     throw e;
   }
+}
+
+// Direct attach for WhatsApp — shares the PDF file itself, not text.
+// Uses Capacitor Share (file:// URI) or Web Share API with files. No extra download.
+export async function sharePdfFileDirectly(doc: any, fileName: string, shareTitle: string, shareText: string): Promise<boolean> {
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]+/g, "_") || "document.pdf";
+  const withPdf = safeName.toLowerCase().endsWith(".pdf") ? safeName : `${safeName}.pdf`;
+  if (isCapacitorNative()) {
+    try {
+      const { Filesystem, Directory } = await import("@capacitor/filesystem");
+      const { Share } = await import("@capacitor/share");
+      const base64 = doc.output("datauristring").split(",")[1];
+      try { await Filesystem.requestPermissions(); } catch {}
+      const res = await Filesystem.writeFile({ path: withPdf, data: base64, directory: Directory.Cache });
+      await Share.share({ title: shareTitle, text: shareText, url: res.uri, dialogTitle: "Share PDF via WhatsApp" });
+      return true;
+    } catch {}
+    try {
+      const { Filesystem, Directory } = await import("@capacitor/filesystem");
+      const { Share } = await import("@capacitor/share");
+      const base64 = doc.output("datauristring").split(",")[1];
+      const res = await Filesystem.writeFile({ path: withPdf, data: base64, directory: Directory.Documents });
+      await Share.share({ title: shareTitle, text: shareText, url: res.uri, dialogTitle: "Share PDF via WhatsApp" });
+      return true;
+    } catch {}
+  }
+  try {
+    const blob = doc.output("blob");
+    const file = new File([blob], withPdf, { type: "application/pdf" });
+    const canShareFiles = typeof navigator.canShare === "function" && (navigator as any).canShare({ files: [file] });
+    if (canShareFiles) {
+      await (navigator as any).share({ title: shareTitle, text: shareText, files: [file] });
+      return true;
+    }
+    if (typeof navigator.share === "function") {
+      try { await (navigator as any).share({ title: shareTitle, text: shareText, files: [file] }); return true; } catch {}
+    }
+  } catch {}
+  return false;
 }

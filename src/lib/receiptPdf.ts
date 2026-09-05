@@ -238,43 +238,18 @@ export async function shareReceiptPDF(data: ReceiptData) {
   const doc = await generateReceiptPDF(data);
   const safe2 = sanitizeNameR(data.student?.name);
   const fileName = `${safe2}_${data.tx.receiptNo}.pdf`;
-  // 1) Native: write to cache then use Capacitor Share sheet (shows WhatsApp etc.)
-  if (isNative()) {
-    try {
-      const { Filesystem, Directory } = await import("@capacitor/filesystem");
-      const { Share } = await import("@capacitor/share");
-      const base64 = doc.output("datauristring").split(",")[1];
-      try { await Filesystem.requestPermissions(); } catch {}
-      const res = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
-      await Share.share({ title: `Fee Receipt ${data.tx.receiptNo}`, text: `Fee Receipt for ${data.student?.name} - Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}`, url: res.uri, dialogTitle: "Share via WhatsApp" });
-      return;
-    } catch {}
-  }
-  // 2) Web Share API with file (Android Chrome, iOS)
+  const title = `Fee Receipt ${data.tx.receiptNo}`;
+  const text = `Fee Receipt for ${data.student?.name} - Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}`;
+  const { sharePdfFileDirectly } = await import("./pdfDownload");
+  const shared = await sharePdfFileDirectly(doc, fileName, title, text);
+  if (shared) return;
   try {
     const blob = doc.output("blob");
     const file = new File([blob], fileName, { type: "application/pdf" });
-    if (typeof navigator.canShare === "function" && (navigator as any).canShare({ files: [file] })) {
-      try {
-        await (navigator as any).share({ title: `Fee Receipt ${data.tx.receiptNo}`, text: `Fee Receipt for ${data.student?.name} - Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}`, files: [file] });
-        return;
-      } catch {}
+    if (typeof navigator.share === "function") {
+      await (navigator as any).share({ title, text, files: [file] });
+      return;
     }
   } catch {}
-  // 3) Fallback: open WhatsApp with text + also trigger direct download to Downloads
-  const msg = `*${data.settings.schoolName}*%0AFee Receipt: ${data.tx.receiptNo}%0AStudent: ${data.student?.name}%0AAmount: Rs. ${Number(data.tx.amount).toLocaleString("en-IN")}%0ADate: ${new Date(data.tx.date).toLocaleDateString("en-GB")}%0A%0A*PDF will download to your Downloads — please attach manually if needed*`;
-  window.open(`https://wa.me/?text=${msg}`, "_blank");
-  // Also save to Downloads for user to attach manually
-  try {
-    const { saveGeneratedPdf } = await import("./pdfDownload");
-    await saveGeneratedPdf(doc, fileName);
-  } catch {
-    const blob = doc.output("blob");
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-  }
+  try { window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:"WhatsApp file share not supported — please use Download then share from Downloads", type:"info"}})); } catch {}
 }

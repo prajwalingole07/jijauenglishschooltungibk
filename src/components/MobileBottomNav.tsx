@@ -23,9 +23,7 @@ const teacherNav = [
 export default function MobileBottomNav() {
   const pathname = usePathname();
   const { user } = useAuth();
-  // Default to admin nav until auth hydrates so buttons are tappable instantly
   const nav = user?.role === "teacher" ? teacherNav : adminNav;
-
   return (
     <nav className="no-print lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-black/10 flex justify-around items-center px-1 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] pb-[max(6px,env(safe-area-inset-bottom))] pt-1.5" style={{ minHeight: "64px" }}>
       {nav.map((item) => {

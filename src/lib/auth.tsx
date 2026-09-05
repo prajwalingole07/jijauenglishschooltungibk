@@ -22,7 +22,6 @@ function getStoredUser(): AuthUser | null{
     const raw=localStorage.getItem(AUTH_KEY);
     if(raw) {
       const u = JSON.parse(raw);
-      // Merge persisted profile photo if present in jijau_profile_photos (survives refresh)
       try {
         const photosRaw = localStorage.getItem("jijau_profile_photos");
         if(photosRaw){
@@ -163,7 +162,6 @@ export function AuthProvider({children}:{children:React.ReactNode}){
     if(!user) return;
     const updated={...user, photo:data} as any;
     localStorage.setItem(AUTH_KEY, JSON.stringify(updated));
-    // Also persist to jijau_profile_photos so Header/Sidebar/profile page all see it after refresh
     try{
       const raw = localStorage.getItem("jijau_profile_photos");
       const m = raw? JSON.parse(raw) : {};

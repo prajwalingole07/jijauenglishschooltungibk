@@ -25,8 +25,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   // Listen for saved events — live sync popups removed per user request
   useEffect(() => {
     const onLive = (e: any) => {
-      // Silently ignore live sync popups ("Live: ..." / "⚡ Live synced")
-      // Keep sync logic intact but don't show intrusive orange toasts.
       return;
     };
     const onSaved = (e: any) => {
@@ -34,7 +32,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       if (!detail?.message) return;
       const msg: string = String(detail.message);
       const type = String(detail.type || "");
-      // Suppress live-sync noise: type live or messages starting with Live
       if (type === "live" || msg.startsWith("Live:") || msg.includes("Live synced") || msg.includes("⚡ Live")) return;
       show(detail.message, detail.type || "success", 3000);
     };

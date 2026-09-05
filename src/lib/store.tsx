@@ -182,7 +182,6 @@ export function StoreProvider({children}:{children:React.ReactNode}){
         const p = await r.json();
         if(p && !p.empty && p._updatedAt && p._updatedAt > lastCloudAt.current){
           applyPayload(p);
-          // Live-synced popup removed — sync silently in background
         }
       }
     }catch{}
@@ -337,7 +336,6 @@ export function StoreProvider({children}:{children:React.ReactNode}){
         const newRecords:AttendanceRecord[] = entries.map(e=> ({id:genId("att"), date, className, studentId:e.studentId, status:e.status}));
         return [...filtered, ...newRecords];
       });
-      // live popup removed
     },
     upsertTeacherAttendance:(date, entries)=>{
       setTeacherAttendance(prev=>{
@@ -346,7 +344,6 @@ export function StoreProvider({children}:{children:React.ReactNode}){
         const newRecords:TeacherAttendance[] = entries.map(e=> ({id:genId("tatt"), date, facultyId:e.facultyId, status:e.status, markedBy:e.markedBy||"admin", updatedAt:new Date().toISOString()}));
         return [...filtered, ...newRecords];
       });
-      // live popup removed
     },
     markTeacherSelf:(facultyId, date, status)=>{
       setTeacherAttendance(prev=>{

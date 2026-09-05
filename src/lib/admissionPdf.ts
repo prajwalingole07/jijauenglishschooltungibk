@@ -358,28 +358,20 @@ export async function shareAdmissionPDF(data: AdmissionData) {
   const doc = await generateAdmissionPDF(data);
   const safe = sanitizeName(data.student?.name);
   const fileName = `${safe}_${data.admissionNo}.pdf`;
-  if (isNative()) {
-    try {
-      const { Filesystem, Directory } = await import("@capacitor/filesystem");
-      const { Share } = await import("@capacitor/share");
-      const base64 = doc.output("datauristring").split(",")[1];
-      try { await Filesystem.requestPermissions(); } catch {}
-      const res = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
-      await Share.share({ title: `Admission Form ${data.admissionNo}`, text: `Admission Form for ${data.student?.name} - ${data.admissionNo}`, url: res.uri, dialogTitle: "Share via WhatsApp" });
-      return;
-    } catch {}
-  }
+  const title = `Admission Form ${data.admissionNo}`;
+  const text = `Admission Form for ${data.student?.name} - ${data.admissionNo}`;
+  const { sharePdfFileDirectly } = await import("./pdfDownload");
+  const shared = await sharePdfFileDirectly(doc, fileName, title, text);
+  if (shared) return;
   try {
     const blob: any = doc.output("blob");
     const file = new File([blob], fileName, { type: "application/pdf" });
-    if (typeof navigator.canShare === "function" && (navigator as any).canShare({ files: [file] })) {
-      try { await (navigator as any).share({ title: `Admission Form ${data.admissionNo}`, text: `Admission Form for ${data.student?.name} - ${data.admissionNo}`, files: [file] }); return; } catch {}
+    if (typeof navigator.share === "function") {
+      await (navigator as any).share({ title, text, files: [file] });
+      return;
     }
   } catch {}
-  const msg = `*${data.settings.schoolName}*%0AAdmission Form: ${data.admissionNo}%0AStudent: ${data.student?.name}%0AClass: ${data.student?.className}%0APDF will download to Downloads — please attach manually if needed`;
-  window.open(`https://wa.me/?text=${msg}`, "_blank");
-  const { saveGeneratedPdf } = await import("./pdfDownload");
-  await saveGeneratedPdf(doc, fileName);
+  try { window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:"WhatsApp file share not supported — please use Download then share from Downloads", type:"info"}})); } catch {}
 }
 
 export async function printAdmissionPDF(data: AdmissionData) {

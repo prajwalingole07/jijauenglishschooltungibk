@@ -20,7 +20,6 @@ export default function Header({ onMenu }:{ onMenu:()=>void }){
   useEffect(()=>{
     const load=()=>{
       try{
-        // Prefer jijau_profile_photos, fallback to auth photo
         const m=JSON.parse(localStorage.getItem("jijau_profile_photos")||"{}");
         if(user && m[user.username]) { setPhoto(m[user.username]); return; }
         const authRaw = localStorage.getItem("jijau_auth_v3");
@@ -35,7 +34,6 @@ export default function Header({ onMenu }:{ onMenu:()=>void }){
     const h=()=> load();
     window.addEventListener("storage",h);
     window.addEventListener("jijau_profile",h as any);
-    // Also listen for direct auth updates
     window.addEventListener("focus", h);
     return()=> { window.removeEventListener("storage",h); window.removeEventListener("jijau_profile",h as any); window.removeEventListener("focus", h); };
   },[user]);
