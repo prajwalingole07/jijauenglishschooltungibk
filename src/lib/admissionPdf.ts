@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import jsPDF from "jspdf";
 
 type AdmissionData = {

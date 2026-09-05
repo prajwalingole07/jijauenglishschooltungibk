@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { SearchBox } from "@/components/UI";
@@ -16,7 +15,7 @@ export default function FeeReceipts(){
         <div className="w-14 h-14 rounded-2xl bg-[#FEE2E2] grid place-items-center mx-auto">🔒</div>
         <div className="font-black">Access Restricted</div>
         <div className="text-sm text-[#7A6F68]">Fee receipts are only for Admin/Founder. Teachers see only Dashboard.</div>
-        <Link href="/dashboard" className="btn-primary inline-block mt-2">Go to My Dashboard</Link>
+        <a href="/dashboard" className="btn-primary inline-block mt-2">Go to My Dashboard</a>
       </div>
     );
   }
@@ -42,20 +41,44 @@ export default function FeeReceipts(){
   const handleDirectDownload = async (tx:any)=>{
     const s=students.find(x=> x.id===tx.studentId);
     const doc = await generateReceiptPDF({ tx, student:s, transactions: transactions.filter((t:any)=> t.studentId===tx.studentId), settings });
-    doc.save(`${tx.receiptNo}.pdf`);
+    const fileName = `${tx.receiptNo}.pdf`;
+    const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
+    if(isNative){
+      try{
+        const { Filesystem, Directory } = await import("@capacitor/filesystem");
+        const base64 = doc.output("datauristring").split(",")[1];
+        try{ await Filesystem.requestPermissions(); }catch{}
+        await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Documents });
+        return;
+      }catch{}
+    }
+    doc.save(fileName);
   };
   const handleDirectShare = async (tx:any)=>{
     const s=students.find(x=> x.id===tx.studentId);
     const doc = await generateReceiptPDF({ tx, student:s, transactions: transactions.filter((t:any)=> t.studentId===tx.studentId), settings });
+    const fileName = `${tx.receiptNo}.pdf`;
+    const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
+    if(isNative){
+      try{
+        const { Filesystem, Directory } = await import("@capacitor/filesystem");
+        const { Share } = await import("@capacitor/share");
+        const base64 = doc.output("datauristring").split(",")[1];
+        try{ await Filesystem.requestPermissions(); }catch{}
+        const res = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Documents });
+        await Share.share({ title:`Fee Receipt ${tx.receiptNo}`, text:`Fee Receipt for ${s?.name} - Rs. ${Number(tx.amount).toLocaleString("en-IN")}`, url: res.uri, dialogTitle: "Share via WhatsApp" });
+        return;
+      }catch{}
+    }
     const blob:any = doc.output("blob");
-    const file=new File([blob], `${tx.receiptNo}.pdf`,{type:"application/pdf"});
+    const file=new File([blob], fileName,{type:"application/pdf"});
     if(typeof navigator.canShare === "function" && (navigator as any).canShare({files:[file]})){
       try{ await (navigator as any).share({ title:`Fee Receipt ${tx.receiptNo}`, text:`Fee Receipt for ${s?.name} - Rs. ${Number(tx.amount).toLocaleString("en-IN")}`, files:[file]}); return; }catch{}
     }
     const msg=`*${settings.schoolName}*%0AFee Receipt: ${tx.receiptNo}%0AStudent: ${s?.name}%0AAmount: Rs. ${Number(tx.amount).toLocaleString("en-IN")}%0ADate: ${new Date(tx.date).toLocaleDateString("en-GB")}`;
     window.open(`https://wa.me/?text=${msg}`,"_blank");
     const url=URL.createObjectURL(blob);
-    const a=document.createElement("a"); a.href=url; a.download=`${tx.receiptNo}.pdf`; a.click();
+    const a=document.createElement("a"); a.href=url; a.download=fileName; a.click();
   };
 
   const totalCollected = transactions.reduce((a,b)=> a+b.amount,0);
@@ -185,9 +208,11 @@ function ReceiptPreview({tx, student, settings, transactions, onClose}:{tx:any; 
     const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
     if(isNative){
       try{
+        const { Filesystem, Directory } = await import("@capacitor/filesystem");
         const base64 = doc.output("datauristring").split(",")[1];
-        const And = (window as any).Android;
-        if(And?.savePdf){ And.savePdf(base64, fileName); return; }
+        try{ await Filesystem.requestPermissions(); }catch{}
+        await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Documents });
+        return;
       }catch{}
     }
     doc.save(fileName);
