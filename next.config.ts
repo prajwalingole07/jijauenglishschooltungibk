@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Explicit project root so builds are consistent on any host (Render, Railway, VPS, etc.)
+  // Vercel-optimized: turbopack root set to this project so lockfile warning disappears on Vercel
   turbopack: { root: __dirname },
   // PWA-friendly headers
   async headers(){

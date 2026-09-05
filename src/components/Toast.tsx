@@ -22,18 +22,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }, duration);
   };
 
-  // Listen for saved events — live sync popups removed per user request
+  // Listen for live edits from Store via custom event
   useEffect(() => {
     const onLive = (e: any) => {
-      return;
+      const detail = e.detail;
+      if (detail?.message) {
+        show(detail.message, "live", 3500);
+      }
     };
     const onSaved = (e: any) => {
       const detail = e.detail;
-      if (!detail?.message) return;
-      const msg: string = String(detail.message);
-      const type = String(detail.type || "");
-      if (type === "live" || msg.startsWith("Live:") || msg.includes("Live synced") || msg.includes("⚡ Live")) return;
-      show(detail.message, detail.type || "success", 3000);
+      if (detail?.message) {
+        show(detail.message, detail.type || "success", 3000);
+      }
     };
     window.addEventListener("jijau_live_edit" as any, onLive);
     window.addEventListener("jijau_saved" as any, onSaved);

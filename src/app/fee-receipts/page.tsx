@@ -1,11 +1,11 @@
 "use client";
+import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { SearchBox } from "@/components/UI";
 import { useAuth } from "@/lib/auth";
 import { IconWhatsapp } from "@/components/IOSIcons";
 import { generateReceiptPDF } from "@/lib/receiptPdf";
-import { saveGeneratedPdf } from "@/lib/pdfDownload";
 
 export default function FeeReceipts(){
   const { transactions, students, settings, deleteReceipt } = useStore();
@@ -16,7 +16,7 @@ export default function FeeReceipts(){
         <div className="w-14 h-14 rounded-2xl bg-[#FEE2E2] grid place-items-center mx-auto">🔒</div>
         <div className="font-black">Access Restricted</div>
         <div className="text-sm text-[#7A6F68]">Fee receipts are only for Admin/Founder. Teachers see only Dashboard.</div>
-        <a href="/dashboard" className="btn-primary inline-block mt-2">Go to My Dashboard</a>
+        <Link href="/dashboard" className="btn-primary inline-block mt-2">Go to My Dashboard</Link>
       </div>
     );
   }
@@ -42,12 +42,20 @@ export default function FeeReceipts(){
   const handleDirectDownload = async (tx:any)=>{
     const s=students.find(x=> x.id===tx.studentId);
     const doc = await generateReceiptPDF({ tx, student:s, transactions: transactions.filter((t:any)=> t.studentId===tx.studentId), settings });
-    await saveGeneratedPdf(doc, `${tx.receiptNo}.pdf`);
+    doc.save(`${tx.receiptNo}.pdf`);
   };
   const handleDirectShare = async (tx:any)=>{
     const s=students.find(x=> x.id===tx.studentId);
-    const { shareReceiptPDF } = await import("@/lib/receiptPdf");
-    await shareReceiptPDF({ tx, student:s, transactions: transactions.filter((t:any)=> t.studentId===tx.studentId), settings });
+    const doc = await generateReceiptPDF({ tx, student:s, transactions: transactions.filter((t:any)=> t.studentId===tx.studentId), settings });
+    const blob:any = doc.output("blob");
+    const file=new File([blob], `${tx.receiptNo}.pdf`,{type:"application/pdf"});
+    if(typeof navigator.canShare === "function" && (navigator as any).canShare({files:[file]})){
+      try{ await (navigator as any).share({ title:`Fee Receipt ${tx.receiptNo}`, text:`Fee Receipt for ${s?.name} - Rs. ${Number(tx.amount).toLocaleString("en-IN")}`, files:[file]}); return; }catch{}
+    }
+    const msg=`*${settings.schoolName}*%0AFee Receipt: ${tx.receiptNo}%0AStudent: ${s?.name}%0AAmount: Rs. ${Number(tx.amount).toLocaleString("en-IN")}%0ADate: ${new Date(tx.date).toLocaleDateString("en-GB")}`;
+    window.open(`https://wa.me/?text=${msg}`,"_blank");
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download=`${tx.receiptNo}.pdf`; a.click();
   };
 
   const totalCollected = transactions.reduce((a,b)=> a+b.amount,0);
@@ -174,11 +182,41 @@ function ReceiptPreview({tx, student, settings, transactions, onClose}:{tx:any; 
     const doc = await generateReceiptPDF({ tx, student, transactions, settings });
     const safe = (student?.name||'Student').replace(/[^a-zA-Z0-9]+/g,'_').slice(0,40);
     const fileName = `${safe}_${tx.receiptNo}.pdf`;
-    await saveGeneratedPdf(doc, fileName);
+    const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
+    if(isNative){
+      try{
+        const base64 = doc.output("datauristring").split(",")[1];
+        const And = (window as any).Android;
+        if(And?.savePdf){ And.savePdf(base64, fileName); return; }
+      }catch{}
+    }
+    doc.save(fileName);
   };
   const handleShare = async ()=>{
-    const { shareReceiptPDF } = await import("@/lib/receiptPdf");
-    await shareReceiptPDF({ tx, student, transactions, settings });
+    const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
+    if(isNative){
+      try{
+        const { Filesystem, Directory } = await import("@capacitor/filesystem");
+        const { Share } = await import("@capacitor/share");
+        const doc2 = await generateReceiptPDF({ tx, student, transactions, settings });
+        const fileName = `${tx.receiptNo}.pdf`;
+        const base64 = doc2.output("datauristring").split(",")[1];
+        try{ await Filesystem.requestPermissions(); }catch{}
+        const res = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Documents });
+        await Share.share({ title: `Fee Receipt ${tx.receiptNo}`, text: `Fee Receipt for ${student?.name} - Rs. ${Number(tx.amount).toLocaleString("en-IN")}`, url: res.uri, dialogTitle: "Share via WhatsApp" });
+        return;
+      }catch{}
+    }
+    const doc = await generateReceiptPDF({ tx, student, transactions, settings });
+    const blob: any = doc.output("blob");
+    const file = new File([blob], `${tx.receiptNo}.pdf`, { type: "application/pdf" });
+    if(typeof navigator.canShare === "function" && (navigator as any).canShare({files:[file]})){
+      try{ await (navigator as any).share({ title: `Fee Receipt ${tx.receiptNo}`, text: `Fee Receipt for ${student?.name} - Rs. ${Number(tx.amount).toLocaleString("en-IN")}`, files:[file]}); return; }catch{}
+    }
+    const msg = `*${settings.schoolName}*%0AFee Receipt: ${tx.receiptNo}%0AStudent: ${student?.name}%0AAmount: Rs. ${Number(tx.amount).toLocaleString("en-IN")}%0ADate: ${new Date(tx.date).toLocaleDateString("en-GB")}`;
+    window.open(`https://wa.me/?text=${msg}`,"_blank");
+    const url = URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download=`${tx.receiptNo}.pdf`; a.click();
   };
   return (
     <div className="modal-backdrop" onClick={onClose}>

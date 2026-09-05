@@ -208,8 +208,30 @@ export async function downloadReceiptPDF(data: ReceiptData) {
   const doc = await generateReceiptPDF(data);
   const safe = sanitizeNameR(data.student?.name);
   const fileName = `${safe}_${data.tx.receiptNo}.pdf`;
-  const { saveGeneratedPdf } = await import("./pdfDownload");
-  await saveGeneratedPdf(doc, fileName);
+  if (isNative()) {
+    try {
+      const base64 = doc.output("datauristring").split(",")[1];
+      const And = (window as any).Android;
+      if (And?.savePdf) { And.savePdf(base64, fileName); return; }
+    } catch {}
+    try {
+      const { Filesystem, Directory } = await import("@capacitor/filesystem");
+      const base64 = doc.output("datauristring").split(",")[1];
+      try { await Filesystem.requestPermissions(); } catch {}
+      await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Documents });
+      return;
+    } catch {}
+    try {
+      const { Filesystem, Directory } = await import("@capacitor/filesystem");
+      const { Share } = await import("@capacitor/share");
+      const fileName = `${data.tx.receiptNo}.pdf`;
+      const base64 = doc.output("datauristring").split(",")[1];
+      const res = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
+      await Share.share({ title: fileName, url: res.uri, dialogTitle: "Save / Share PDF" });
+      return;
+    } catch {}
+  }
+  doc.save(fileName);
 }
 
 export async function printReceiptPDF(data: ReceiptData) {

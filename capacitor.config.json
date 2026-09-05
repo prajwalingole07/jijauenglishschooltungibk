@@ -3,6 +3,7 @@
   "appName": "JIJAU ENGLISH SCHOOL, TUNGI (B.K)",
   "webDir": ".next",
   "server": {
+    "url": "https://jijauenglishschooltungibk1.vercel.app",
     "cleartext": true
   },
   "android": {

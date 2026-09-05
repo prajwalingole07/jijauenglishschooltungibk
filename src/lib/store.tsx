@@ -182,6 +182,9 @@ export function StoreProvider({children}:{children:React.ReactNode}){
         const p = await r.json();
         if(p && !p.empty && p._updatedAt && p._updatedAt > lastCloudAt.current){
           applyPayload(p);
+          try{
+            window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:`⚡ Live synced (${lat}ms)`, type:"info"}}));
+          }catch{}
         }
       }
     }catch{}
@@ -313,6 +316,7 @@ export function StoreProvider({children}:{children:React.ReactNode}){
       setStudents(prev=> [rec, ...prev]);
       try{
         window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:`✓ Student ${s.name} added`, type:"success"}}));
+        window.dispatchEvent(new CustomEvent("jijau_live_edit",{detail:{message:`Live: New student ${s.name} (${s.className})`}}));
       }catch{}
     },
     updateStudent:(id,patch)=> {
@@ -336,6 +340,7 @@ export function StoreProvider({children}:{children:React.ReactNode}){
         const newRecords:AttendanceRecord[] = entries.map(e=> ({id:genId("att"), date, className, studentId:e.studentId, status:e.status}));
         return [...filtered, ...newRecords];
       });
+      try{ window.dispatchEvent(new CustomEvent("jijau_live_edit",{detail:{message:`Live: Attendance updated for ${className}`}})); }catch{}
     },
     upsertTeacherAttendance:(date, entries)=>{
       setTeacherAttendance(prev=>{
@@ -344,6 +349,7 @@ export function StoreProvider({children}:{children:React.ReactNode}){
         const newRecords:TeacherAttendance[] = entries.map(e=> ({id:genId("tatt"), date, facultyId:e.facultyId, status:e.status, markedBy:e.markedBy||"admin", updatedAt:new Date().toISOString()}));
         return [...filtered, ...newRecords];
       });
+      try{ window.dispatchEvent(new CustomEvent("jijau_live_edit",{detail:{message:`Live: Teacher attendance saved for ${date}`}})); }catch{}
     },
     markTeacherSelf:(facultyId, date, status)=>{
       setTeacherAttendance(prev=>{
@@ -352,14 +358,14 @@ export function StoreProvider({children}:{children:React.ReactNode}){
       });
       try{ window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:`✓ Self attendance marked ${status}`, type:"success"}})); }catch{}
     },
-    addHomework:(h)=> { setHomework(prev=> [{...h, id:genId("hw")}, ...prev]); try{ window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:`✓ Homework "${h.title}" added`, type:"success"}})); }catch{} },
+    addHomework:(h)=> { setHomework(prev=> [{...h, id:genId("hw")}, ...prev]); try{ window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:`✓ Homework "${h.title}" added`, type:"success"}})); window.dispatchEvent(new CustomEvent("jijau_live_edit",{detail:{message:`Live: New homework ${h.title} for ${h.className}`}})); }catch{} },
     updateHomework:(id,patch)=> { setHomework(prev=> prev.map(x=> x.id===id? {...x,...patch}:x)); try{ window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:"✏️ Homework updated", type:"success"}})); }catch{} },
     deleteHomework:(id)=> { pendingDeletes.current.homework.push(id); setHomework(prev=> prev.filter(x=> x.id!==id)); try{ window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:"Homework deleted", type:"info"}})); }catch{} },
     collectFee:(tx)=>{
       const rec:FeeTransaction = {...tx, id:genId("tx"), receiptNo: receiptNo(settings.receiptPrefix || "JES")};
       setTransactions(prev=> [rec, ...prev]);
       setStudents(prev=> prev.map(s=> s.id===tx.studentId? {...s, feesPaid: s.feesPaid + tx.amount}:s));
-      try{ window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:`✓ Fee Rs. ${tx.amount.toLocaleString("en-IN")} collected`, type:"success"}})); }catch{}
+      try{ window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:`✓ Fee Rs. ${tx.amount.toLocaleString("en-IN")} collected`, type:"success"}})); window.dispatchEvent(new CustomEvent("jijau_live_edit",{detail:{message:`Live: Fee collected Rs. ${tx.amount.toLocaleString("en-IN")}`}})); }catch{}
       return rec;
     },
     deleteReceipt:(receiptNo)=>{
@@ -385,6 +391,7 @@ export function StoreProvider({children}:{children:React.ReactNode}){
       setNotices(prev=> [rec,...prev]);
       try{
         window.dispatchEvent(new CustomEvent("jijau_saved",{detail:{message:`📢 Notice published: ${n.title}`, type:"success"}}));
+        window.dispatchEvent(new CustomEvent("jijau_live_edit",{detail:{message:`Live: New notice "${n.title}"`}}));
         import("@/lib/notifications").then(m => {
           m.sendMobileDeviceNotification(`Jijau School: ${n.title}`, {
             body: n.content ? `${n.content}\nTarget: ${n.target}` : `New notice for ${n.target}`,

@@ -16,21 +16,10 @@ export default function ProfilePage(){
   const [photo, setPhoto]=useState<string | null>(null);
   const fileRef=useRef<HTMLInputElement>(null);
   useEffect(()=>{
-    const load = ()=>{
-      try{
-        const raw=localStorage.getItem("jijau_profile_photos");
-        if(raw){ const m=JSON.parse(raw); if(user && m[user.username]) { setPhoto(m[user.username]); return; } }
-        const authRaw = localStorage.getItem("jijau_auth_v3");
-        if(authRaw){ const u=JSON.parse(authRaw); if(u?.photo) { setPhoto(u.photo); return; } }
-        setPhoto(null);
-      }catch{ setPhoto(null); }
-    };
-    load();
-    const h = () => load();
-    window.addEventListener("storage", h);
-    window.addEventListener("jijau_profile", h as any);
-    window.addEventListener("focus", h);
-    return ()=> { window.removeEventListener("storage", h); window.removeEventListener("jijau_profile", h as any); window.removeEventListener("focus", h); };
+    try{
+      const raw=localStorage.getItem("jijau_profile_photos");
+      if(raw){ const m=JSON.parse(raw); if(user && m[user.username]) setPhoto(m[user.username]); }
+    }catch{}
   },[user]);
   const onFile=(e:React.ChangeEvent<HTMLInputElement>)=>{
     const f=e.target.files?.[0]; if(!f) return;

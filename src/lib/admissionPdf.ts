@@ -350,35 +350,29 @@ export async function downloadAdmissionPDF(data: AdmissionData) {
   const doc = await generateAdmissionPDF(data);
   const safe = sanitizeName(data.student?.name);
   const fileName = `${safe}_${data.admissionNo}.pdf`;
-  const { saveGeneratedPdf } = await import("./pdfDownload");
-  await saveGeneratedPdf(doc, fileName);
-}
-
-export async function shareAdmissionPDF(data: AdmissionData) {
-  const doc = await generateAdmissionPDF(data);
-  const safe = sanitizeName(data.student?.name);
-  const fileName = `${safe}_${data.admissionNo}.pdf`;
   if (isNative()) {
+    try {
+      const base64 = doc.output("datauristring").split(",")[1];
+      const And = (window as any).Android;
+      if (And?.savePdf) { And.savePdf(base64, fileName); return; }
+    } catch {}
+    try {
+      const { Filesystem, Directory } = await import("@capacitor/filesystem");
+      const base64 = doc.output("datauristring").split(",")[1];
+      try { await Filesystem.requestPermissions(); } catch {}
+      await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Documents });
+      return;
+    } catch {}
     try {
       const { Filesystem, Directory } = await import("@capacitor/filesystem");
       const { Share } = await import("@capacitor/share");
       const base64 = doc.output("datauristring").split(",")[1];
-      try { await Filesystem.requestPermissions(); } catch {}
       const res = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
-      await Share.share({ title: `Admission Form ${data.admissionNo}`, text: `Admission Form for ${data.student?.name} - ${data.admissionNo}`, url: res.uri, dialogTitle: "Share via WhatsApp" });
+      await Share.share({ title: fileName, url: res.uri, dialogTitle: "Save / Share PDF" });
       return;
     } catch {}
   }
-  const blob: any = doc.output("blob");
-  const file = new File([blob], fileName, { type: "application/pdf" });
-  if (typeof navigator.canShare === "function" && (navigator as any).canShare({ files: [file] })) {
-    try { await (navigator as any).share({ title: `Admission Form ${data.admissionNo}`, text: `Admission Form for ${data.student?.name} - ${data.admissionNo}`, files: [file] }); return; } catch {}
-  }
-  const msg = `*Admission Form: ${data.admissionNo}*%0AStudent: ${data.student?.name}%0AClass: ${data.student?.className}%0A%0A*PDF attached - please download from portal*`;
-  window.open(`https://wa.me/?text=${msg}`, "_blank");
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = fileName; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  doc.save(fileName);
 }
 
 export async function printAdmissionPDF(data: AdmissionData) {
