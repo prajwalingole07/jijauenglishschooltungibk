@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">JIJAU ENGLISH SCHOOL, TUNGI (B.K)</string>
+    <string name="title_activity_main">JIJAU ENGLISH SCHOOL, TUNGI (B.K)</string>
+    <string name="package_name">com.jijau.school</string>
+    <string name="custom_url_scheme">com.jijau.school</string>
+</resources>
